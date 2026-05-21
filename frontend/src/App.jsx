@@ -12,6 +12,47 @@ function App() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('summary');
+  const [isRecording, setIsRecording] = useState(false);
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech Recognition is not supported in this browser.');
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + ' ';
+        }
+      }
+      if (finalTranscript) {
+        setInput(prev => prev + finalTranscript);
+      }
+    };
+    recognition.onerror = (e) => {
+      console.error(e);
+      setIsRecording(false);
+    };
+    recognition.onend = () => setIsRecording(false);
+
+    recognition.start();
+    // Auto stop after 2 mins
+    setTimeout(() => {
+      recognition.stop();
+    }, 120000);
+  };
 
   const fetchHistory = async () => {
     try {
@@ -67,6 +108,38 @@ function App() {
     setInput(item.url || (item.text ? item.text.substring(0, 100) + '...' : ''));
   };
 
+  const exportToMarkdown = () => {
+    if (!data) return;
+    let md = '# AI Study Packet\n\n## Summary\n';
+    if (data.summary) {
+      data.summary.forEach(point => { md += `- ${point}\n`; });
+    }
+    
+    if (data.flashcards) {
+      md += '\n## Flashcards\n';
+      data.flashcards.forEach(fc => {
+        md += `**Q:** ${fc.front}\n**A:** ${fc.back}\n\n`;
+      });
+    }
+    
+    if (data.quiz) {
+      md += '## Quiz\n';
+      data.quiz.forEach(q => {
+        md += `**Q:** ${q.question} (${q.difficulty})\n`;
+        q.options.forEach(opt => { md += `- ${opt}\n`; });
+        md += `**Answer:** ${q.correctAnswer}\n*Explanation:* ${q.explanation}\n\n`;
+      });
+    }
+
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'study-packet.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex h-screen bg-background font-sans text-gray-800">
       <HistorySidebar history={history} onSelectHistory={handleSelectHistory} />
@@ -93,15 +166,25 @@ function App() {
               />
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Supports raw text and URLs.</span>
-                <button 
-                  type="submit" 
-                  disabled={loading || !input.trim()}
-                  className="bg-primary hover:bg-secondary text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {loading ? (
-                    <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating...</>
-                  ) : 'Summarize'}
-                </button>
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    className={`p-3 rounded-full transition-colors shadow-sm ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    title="Record voice notes"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={loading || !input.trim()}
+                    className="bg-primary hover:bg-secondary text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {loading ? (
+                      <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating...</>
+                    ) : 'Summarize'}
+                  </button>
+                </div>
               </div>
             </form>
             {error && <p className="text-red-500 mt-4 text-sm bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
@@ -159,6 +242,16 @@ function App() {
                     <Quiz questions={data.quiz} />
                   </div>
                 )}
+              </div>
+
+              <div className="border-t border-gray-200 pt-6 mt-8 flex justify-center">
+                <button 
+                  onClick={exportToMarkdown}
+                  className="bg-white border-2 border-primary text-primary hover:bg-primary hover:text-white font-semibold py-3 px-8 rounded-lg transition-colors shadow-sm flex items-center"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  Download Study Packet
+                </button>
               </div>
             </div>
           )}

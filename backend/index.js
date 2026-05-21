@@ -4,7 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
 import crypto from 'crypto';
-import * as cheerio from 'cheerio';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
 
 dotenv.config();
 
@@ -50,13 +51,13 @@ const extractTextFromUrl = async (url) => {
   try {
     const response = await fetch(url);
     const html = await response.text();
-    const $ = cheerio.load(html);
-
-    // Remove scripts and styles
-    $('script, style, noscript').remove();
-
-    // Extract text from body
-    return $('body').text().replace(/\s+/g, ' ').trim();
+    const doc = new JSDOM(html, { url });
+    const reader = new Readability(doc.window.document);
+    const article = reader.parse();
+    if (!article || !article.textContent) {
+      throw new Error('Failed to parse article content.');
+    }
+    return article.textContent.replace(/\s+/g, ' ').trim();
   } catch (error) {
     console.error('Error fetching URL:', error);
     throw new Error('Could not extract text from the provided URL.');
@@ -94,12 +95,41 @@ app.post('/api/summarize', async (req, res) => {
       }
     }
 
-    // Call Groq API
     console.log('Calling Groq API for text summary...');
-    const prompt = `You are an expert tutor. Create a study guide based on the following text.
+    let textToProcess = rawText;
+    
+    // Chunking Logic for > 4000 words
+    const words = rawText.split(/\s+/);
+    if (words.length > 4000) {
+      console.log(`Text is ${words.length} words. Chunking...`);
+      const chunks = [];
+      for (let i = 0; i < words.length; i += 2000) {
+        chunks.push(words.slice(i, i + 2000).join(' '));
+      }
+      
+      const chunkPromises = chunks.map(chunk => 
+        groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: 'You are an expert at extracting key takeaways. Return ONLY a JSON object with a "takeaways" array containing 3 string bullet points.' },
+            { role: 'user', content: `Extract 3 key takeaways from this text:\n\n${chunk}` }
+          ],
+          model: 'llama-3.3-70b-versatile',
+          response_format: { type: 'json_object' }
+        }).then(res => JSON.parse(res.choices[0]?.message?.content || '{"takeaways":[]}').takeaways)
+      );
+      
+      const chunkResults = await Promise.all(chunkPromises);
+      const allTakeaways = chunkResults.flat().join('\n- ');
+      
+      textToProcess = `Here are detailed aggregated takeaways from the full text:\n- ${allTakeaways}\n\nUse these to generate the final comprehensive summary, flashcards, and quiz.`;
+    } else {
+      textToProcess = rawText.substring(0, 5000 * 5); // Allow up to ~25000 chars if not chunking
+    }
+
+    const prompt = `You are an expert tutor. Create a study guide based on the following text or aggregated takeaways.
 Your output must be EXACTLY a valid JSON object matching this schema:
 {
-  "summary": ["Bullet point 1", "Bullet point 2", "Bullet point 3"],
+  "summary": ["Bullet point 1", "Bullet point 2", "Bullet point 3", "Bullet point 4", "Bullet point 5"],
   "flashcards": [
     { "id": 1, "front": "Question 1?", "back": "Answer 1." },
     // exactly 5 flashcards
@@ -112,10 +142,10 @@ Your output must be EXACTLY a valid JSON object matching this schema:
   ]
 }
 
-Ensure the JSON is perfectly formatted. The 'summary' must be an array of 3 to 5 highly concise, high-impact bullet points capturing the core essence of the input text. No markdown wrapping, just the raw JSON object.
+Ensure the JSON is perfectly formatted. The 'summary' must be an array of EXACTLY 5 highly concise, high-impact bullet points capturing the core essence of the input. No markdown wrapping, just the raw JSON object.
 
 Text:
-${rawText.substring(0, 5000)}`;
+${textToProcess}`;
 
     const completion = await groq.chat.completions.create({
       messages: [

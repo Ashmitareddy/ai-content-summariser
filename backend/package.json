@@ -12,11 +12,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "groq-sdk": "^1.2.0",
+    "jsdom": "^29.1.1",
     "mongoose": "^9.6.2"
   }
 }
