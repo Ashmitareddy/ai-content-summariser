@@ -3,7 +3,8 @@ import Flashcard from './components/Flashcard';
 import Quiz from './components/Quiz';
 import HistorySidebar from './components/HistorySidebar';
 
-const API_BASE_URL = 'http://localhost:8082/api'; // Use env var in production
+// Replace line 6 with this:
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:8082/api' : '/api'; // Use env var in production
 
 function App() {
   const [input, setInput] = useState('');
@@ -73,7 +74,7 @@ function App() {
   const handleSummarize = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
-    
+
     setLoading(true);
     setError('');
     setData(null);
@@ -84,13 +85,13 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input })
       });
-      
+
       const result = await res.json();
-      
+
       if (!res.ok) {
         throw new Error(result.error || 'Failed to generate summary');
       }
-      
+
       setData(result);
       fetchHistory(); // Refresh history
       setActiveTab('summary');
@@ -114,14 +115,14 @@ function App() {
     if (data.summary) {
       data.summary.forEach(point => { md += `- ${point}\n`; });
     }
-    
+
     if (data.flashcards) {
       md += '\n## Flashcards\n';
       data.flashcards.forEach(fc => {
         md += `**Q:** ${fc.front}\n**A:** ${fc.back}\n\n`;
       });
     }
-    
+
     if (data.quiz) {
       md += '## Quiz\n';
       data.quiz.forEach(q => {
@@ -143,7 +144,7 @@ function App() {
   return (
     <div className="flex h-screen bg-background font-sans text-gray-800">
       <HistorySidebar history={history} onSelectHistory={handleSelectHistory} />
-      
+
       <main className="flex-1 flex flex-col h-screen overflow-y-auto">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
@@ -158,7 +159,7 @@ function App() {
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border-t-4 border-accent">
             <h2 className="text-xl font-semibold mb-4 text-secondary">Generate Study Guide</h2>
             <form onSubmit={handleSummarize}>
-              <textarea 
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Paste an article URL or text block here..."
@@ -175,8 +176,8 @@ function App() {
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={loading || !input.trim()}
                     className="bg-primary hover:bg-secondary text-white font-semibold py-2 px-6 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
@@ -194,19 +195,19 @@ function App() {
           {data && (
             <div className="animate-fade-in">
               <div className="flex space-x-4 mb-6">
-                <button 
+                <button
                   className={`px-6 py-3 rounded-lg font-semibold transition-colors shadow-sm ${activeTab === 'summary' ? 'bg-secondary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   onClick={() => setActiveTab('summary')}
                 >
                   Summary
                 </button>
-                <button 
+                <button
                   className={`px-6 py-3 rounded-lg font-semibold transition-colors shadow-sm ${activeTab === 'flashcards' ? 'bg-secondary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   onClick={() => setActiveTab('flashcards')}
                 >
                   Flashcards
                 </button>
-                <button 
+                <button
                   className={`px-6 py-3 rounded-lg font-semibold transition-colors shadow-sm ${activeTab === 'quiz' ? 'bg-secondary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   onClick={() => setActiveTab('quiz')}
                 >
@@ -245,7 +246,7 @@ function App() {
               </div>
 
               <div className="border-t border-gray-200 pt-6 mt-8 flex justify-center">
-                <button 
+                <button
                   onClick={exportToMarkdown}
                   className="bg-white border-2 border-primary text-primary hover:bg-primary hover:text-white font-semibold py-3 px-8 rounded-lg transition-colors shadow-sm flex items-center"
                 >
