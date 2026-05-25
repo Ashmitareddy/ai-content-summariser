@@ -20,8 +20,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "frontend/$1",
-      "handle": "filesystem"
+      "dest": "frontend/$1"
     },
     {
       "src": "/(.*)",
